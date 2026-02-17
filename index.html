@@ -1,0 +1,1133 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes">
+    <meta name="theme-color" content="#1e3c72">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <title>🌙 Mondsichel-Rechner Pro</title>
+    
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+    
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            -webkit-tap-highlight-color: transparent;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #1e3c72;
+            overflow: hidden;
+            position: fixed;
+            width: 100%;
+            height: 100vh;
+        }
+        
+        .app-container {
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            background: white;
+        }
+        
+        .header {
+            background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+            color: white;
+            padding: 12px 15px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+            z-index: 1000;
+        }
+        
+        .header-top {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .header h1 {
+            font-size: 20px;
+            font-weight: 700;
+        }
+        
+        .header-buttons {
+            display: flex;
+            gap: 8px;
+        }
+        
+        .header-btn {
+            background: rgba(255,255,255,0.2);
+            border: none;
+            color: white;
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            font-size: 16px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .header-btn.active {
+            background: rgba(255,255,255,0.4);
+        }
+        
+        .time-display {
+            margin-top: 8px;
+            font-size: 13px;
+            opacity: 0.95;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .controls {
+            padding: 12px 15px;
+            background: #f8f9fa;
+            border-bottom: 2px solid #e0e0e0;
+        }
+        
+        .date-row {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 10px;
+        }
+        
+        .date-input {
+            flex: 1;
+            padding: 12px;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            font-size: 15px;
+        }
+        
+        .city-select {
+            flex: 1;
+            padding: 12px;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            font-size: 15px;
+            background: white;
+        }
+        
+        .quick-dates {
+            display: flex;
+            gap: 6px;
+            margin-bottom: 10px;
+            overflow-x: auto;
+            padding-bottom: 3px;
+            -webkit-overflow-scrolling: touch;
+        }
+        
+        .quick-dates::-webkit-scrollbar {
+            display: none;
+        }
+        
+        .quick-date-btn {
+            padding: 8px 12px;
+            background: white;
+            border: 2px solid #ddd;
+            border-radius: 16px;
+            font-size: 12px;
+            font-weight: 600;
+            white-space: nowrap;
+            cursor: pointer;
+        }
+        
+        .quick-date-btn.active {
+            background: #667eea;
+            color: white;
+            border-color: #667eea;
+        }
+        
+        .calculate-btn {
+            width: 100%;
+            padding: 14px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 10px;
+            font-size: 16px;
+            font-weight: 700;
+            cursor: pointer;
+        }
+        
+        .calculate-btn:disabled {
+            opacity: 0.6;
+        }
+        
+        .map-container {
+            flex: 1;
+            position: relative;
+        }
+        
+        #map {
+            width: 100%;
+            height: 100%;
+        }
+        
+        .status-banner {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            right: 10px;
+            padding: 10px 12px;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+            z-index: 1000;
+            display: none;
+            font-size: 13px;
+        }
+        
+        .status-banner.show {
+            display: block;
+            animation: slideDown 0.3s ease;
+        }
+        
+        @keyframes slideDown {
+            from { transform: translateY(-100%); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+        
+        .status-banner.loading {
+            background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+        
+        .status-banner.success {
+            background: #4caf50;
+            color: white;
+        }
+        
+        .progress-container {
+            margin-top: 6px;
+            height: 3px;
+            background: rgba(255,255,255,0.3);
+            border-radius: 2px;
+            overflow: hidden;
+        }
+        
+        .progress-bar {
+            height: 100%;
+            background: white;
+            width: 0%;
+            transition: width 0.3s;
+        }
+        
+        .layers-menu {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0,0,0,0.5);
+            z-index: 3000;
+            display: none;
+        }
+        
+        .layers-menu.show {
+            display: flex;
+            align-items: flex-end;
+            animation: fadeIn 0.2s ease;
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+        
+        .layers-content {
+            width: 100%;
+            background: white;
+            border-radius: 20px 20px 0 0;
+            padding: 20px;
+            max-height: 70vh;
+            overflow-y: auto;
+            animation: slideUp 0.3s ease;
+        }
+        
+        @keyframes slideUp {
+            from { transform: translateY(100%); }
+            to { transform: translateY(0); }
+        }
+        
+        .layers-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+        
+        .layers-title {
+            font-size: 18px;
+            font-weight: 700;
+            color: #1e3c72;
+        }
+        
+        .close-btn {
+            background: none;
+            border: none;
+            font-size: 24px;
+            color: #666;
+            cursor: pointer;
+        }
+        
+        .layer-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 10px;
+            margin-bottom: 10px;
+        }
+        
+        .layer-info {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        
+        .layer-icon {
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+        }
+        
+        .layer-label {
+            font-weight: 600;
+            font-size: 14px;
+        }
+        
+        .toggle-switch {
+            position: relative;
+            width: 50px;
+            height: 28px;
+        }
+        
+        .toggle-switch input {
+            display: none;
+        }
+        
+        .toggle-slider {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: #ccc;
+            border-radius: 28px;
+            cursor: pointer;
+            transition: 0.3s;
+        }
+        
+        .toggle-slider:before {
+            position: absolute;
+            content: "";
+            height: 20px;
+            width: 20px;
+            left: 4px;
+            bottom: 4px;
+            background: white;
+            border-radius: 50%;
+            transition: 0.3s;
+        }
+        
+        .toggle-switch input:checked + .toggle-slider {
+            background: #667eea;
+        }
+        
+        .toggle-switch input:checked + .toggle-slider:before {
+            transform: translateX(22px);
+        }
+        
+        .time-control {
+            margin-top: 20px;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 10px;
+        }
+        
+        .time-control-label {
+            font-weight: 600;
+            margin-bottom: 10px;
+            font-size: 14px;
+        }
+        
+        .time-slider {
+            width: 100%;
+            height: 6px;
+            border-radius: 3px;
+            background: #ddd;
+            outline: none;
+            -webkit-appearance: none;
+        }
+        
+        .time-slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: #667eea;
+            cursor: pointer;
+        }
+        
+        .time-value {
+            text-align: center;
+            margin-top: 8px;
+            font-weight: 600;
+            color: #667eea;
+        }
+        
+        .fab-group {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            z-index: 1500;
+        }
+        
+        .fab {
+            width: 56px;
+            height: 56px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-radius: 50%;
+            border: none;
+            color: white;
+            font-size: 22px;
+            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+            cursor: pointer;
+            display: none;
+        }
+        
+        .fab.show {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .fab:active {
+            transform: scale(0.95);
+        }
+        
+        .info-popup {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: white;
+            border-radius: 20px 20px 0 0;
+            padding: 20px;
+            box-shadow: 0 -4px 20px rgba(0,0,0,0.2);
+            z-index: 2000;
+            transform: translateY(100%);
+            transition: transform 0.3s ease;
+        }
+        
+        .info-popup.show {
+            transform: translateY(0);
+        }
+        
+        .info-popup-handle {
+            width: 40px;
+            height: 4px;
+            background: #ddd;
+            border-radius: 2px;
+            margin: 0 auto 15px;
+        }
+        
+        .info-popup-title {
+            font-size: 18px;
+            font-weight: 700;
+            margin-bottom: 15px;
+            color: #1e3c72;
+        }
+        
+        .info-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 12px;
+        }
+        
+        .info-item {
+            background: #f8f9fa;
+            padding: 12px;
+            border-radius: 8px;
+        }
+        
+        .info-item-label {
+            font-size: 11px;
+            color: #666;
+            text-transform: uppercase;
+            margin-bottom: 4px;
+        }
+        
+        .info-item-value {
+            font-size: 16px;
+            font-weight: 700;
+            color: #1e3c72;
+        }
+        
+        .spinner {
+            display: inline-block;
+            width: 14px;
+            height: 14px;
+            border: 2px solid rgba(255,255,255,0.3);
+            border-top-color: white;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+        
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <div class="app-container">
+        <div class="header">
+            <div class="header-top">
+                <h1>🌙 Mondsichel Pro</h1>
+                <div class="header-buttons">
+                    <button class="header-btn" id="layersBtn" title="Ebenen">
+                        <i class="fas fa-layer-group"></i>
+                    </button>
+                    <button class="header-btn" id="infoBtn" title="Info">
+                        <i class="fas fa-info"></i>
+                    </button>
+                </div>
+            </div>
+            <div class="time-display">
+                <span id="worldTime">🌍 UTC: --:--</span>
+                <span id="localTime">📍 Lokal: --:--</span>
+            </div>
+        </div>
+        
+        <div class="controls">
+            <div class="date-row">
+                <input type="date" class="date-input" id="dateInput" />
+                <select class="city-select" id="citySelect">
+                    <option value="">Standort wählen</option>
+                    <optgroup label="🕋 Wichtige Städte">
+                        <option value="21.4225,39.8262">Mekka, Saudi-Arabien</option>
+                        <option value="24.7136,46.6753">Riad, Saudi-Arabien</option>
+                        <option value="30.0444,31.2357">Kairo, Ägypten</option>
+                        <option value="41.0082,28.9784">Istanbul, Türkei</option>
+                        <option value="33.8938,35.5018">Beirut, Libanon</option>
+                        <option value="31.9454,35.9284">Amman, Jordanien</option>
+                    </optgroup>
+                    <optgroup label="🌏 Asien">
+                        <option value="-6.2088,106.8456">Jakarta, Indonesien</option>
+                        <option value="3.1390,101.6869">Kuala Lumpur, Malaysia</option>
+                        <option value="24.8607,67.0011">Karachi, Pakistan</option>
+                        <option value="28.6139,77.2090">Delhi, Indien</option>
+                        <option value="23.8103,90.4125">Dhaka, Bangladesch</option>
+                    </optgroup>
+                    <optgroup label="🌍 Afrika">
+                        <option value="6.5244,3.3792">Lagos, Nigeria</option>
+                        <option value="33.5731,-7.5898">Casablanca, Marokko</option>
+                        <option value="36.8065,10.1815">Tunis, Tunesien</option>
+                    </optgroup>
+                    <optgroup label="🌎 Europa/Amerika">
+                        <option value="51.5074,-0.1278">London, UK</option>
+                        <option value="52.5200,13.4050">Berlin, Deutschland</option>
+                        <option value="40.7128,-74.0060">New York, USA</option>
+                    </optgroup>
+                    <optgroup label="📍 Benutzerdefiniert">
+                        <option value="-6.132441,-131.050935">Mein Standort</option>
+                    </optgroup>
+                </select>
+            </div>
+            
+            <div class="quick-dates">
+                <button class="quick-date-btn active" data-days="0">Heute</button>
+                <button class="quick-date-btn" data-days="1">Morgen</button>
+                <button class="quick-date-btn" data-days="7">+7 Tage</button>
+                <button class="quick-date-btn" data-days="14">+14 Tage</button>
+                <button class="quick-date-btn" data-days="30">+30 Tage</button>
+            </div>
+            
+            <button class="calculate-btn" id="calculateBtn">
+                🔍 Berechnen
+            </button>
+        </div>
+        
+        <div class="map-container">
+            <div id="map"></div>
+            
+            <div class="status-banner" id="statusBanner">
+                <div id="statusText">Berechnung läuft...</div>
+                <div class="progress-container" id="progressContainer" style="display: none;">
+                    <div class="progress-bar" id="progressBar"></div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="fab-group">
+            <button class="fab" id="locationFab" title="Zu meinem Standort">
+                <i class="fas fa-crosshairs"></i>
+            </button>
+            <button class="fab" id="statsFab" title="Statistiken">
+                <i class="fas fa-chart-bar"></i>
+            </button>
+        </div>
+    </div>
+    
+    <!-- Layers Menu -->
+    <div class="layers-menu" id="layersMenu">
+        <div class="layers-content">
+            <div class="layers-handle"></div>
+            <div class="layers-header">
+                <div class="layers-title">⚙️ Kartenebenen</div>
+                <button class="close-btn" id="closeLayersBtn">&times;</button>
+            </div>
+            
+            <div class="layer-item">
+                <div class="layer-info">
+                    <div class="layer-icon" style="background: linear-gradient(135deg, #FFD700, #FFA500);"></div>
+                    <div class="layer-label">☀️ Tag/Nacht-Linie</div>
+                </div>
+                <label class="toggle-switch">
+                    <input type="checkbox" id="toggleTerminator" checked>
+                    <span class="toggle-slider"></span>
+                </label>
+            </div>
+            
+            <div class="layer-item">
+                <div class="layer-info">
+                    <div class="layer-icon" style="background: lime;"></div>
+                    <div class="layer-label">🟢 Bloßes Auge</div>
+                </div>
+                <label class="toggle-switch">
+                    <input type="checkbox" id="toggleEye" checked>
+                    <span class="toggle-slider"></span>
+                </label>
+            </div>
+            
+            <div class="layer-item">
+                <div class="layer-info">
+                    <div class="layer-icon" style="background: blue;"></div>
+                    <div class="layer-label">🔵 Teleskop</div>
+                </div>
+                <label class="toggle-switch">
+                    <input type="checkbox" id="toggleTelescope" checked>
+                    <span class="toggle-slider"></span>
+                </label>
+            </div>
+            
+            <div class="layer-item">
+                <div class="layer-info">
+                    <div class="layer-icon" style="background: red;"></div>
+                    <div class="layer-label">🔴 Nicht sichtbar</div>
+                </div>
+                <label class="toggle-switch">
+                    <input type="checkbox" id="toggleInvisible" checked>
+                    <span class="toggle-slider"></span>
+                </label>
+            </div>
+            
+            <div class="time-control">
+                <div class="time-control-label">🕐 Uhrzeit anpassen (UTC)</div>
+                <input type="range" class="time-slider" id="timeSlider" min="0" max="23" value="12" step="1">
+                <div class="time-value" id="timeValue">12:00 UTC</div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Info Popup -->
+    <div class="info-popup" id="infoPopup">
+        <div class="info-popup-handle"></div>
+        <div class="info-popup-title" id="infoTitle">📍 Punkt-Information</div>
+        <div class="info-grid" id="infoGrid">
+            <!-- Dynamisch gefüllt -->
+        </div>
+    </div>
+    
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@joergdietrich/leaflet.terminator@1.0.0/L.Terminator.js"></script>
+    
+    <script>
+        const CONFIG = {
+            myLat: -6.132441,
+            myLon: -131.050935,
+            gridStep: 4,
+            minAltitude: 0.5,
+            minElongationInvisible: 7.0,
+            minElongationTelescope: 10.5
+        };
+        
+        let map, terminatorLayer, myLocationMarker;
+        let eyeLayer, telescopeLayer, invisibleLayer;
+        let currentData = null;
+        let currentHour = 12;
+        let selectedLocation = { lat: CONFIG.myLat, lon: CONFIG.myLon, name: "Mein Standort" };
+        
+        // =====================================
+        // INITIALISIERUNG
+        // =====================================
+        
+        window.addEventListener('load', () => {
+            initMap();
+            initUI();
+            initTime();
+            
+            const today = new Date().toISOString().split('T')[0];
+            document.getElementById('dateInput').value = today;
+        });
+        
+        function initMap() {
+            map = L.map('map', {
+                center: [CONFIG.myLat, CONFIG.myLon],
+                zoom: 3,
+                zoomControl: true,
+                minZoom: 2,
+                maxZoom: 12,
+                zoomSnap: 0.5
+            });
+            
+            L.control.zoom({
+                position: 'bottomright'
+            }).addTo(map);
+            
+            L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+                attribution: 'Esri',
+                maxZoom: 18
+            }).addTo(map);
+            
+            eyeLayer = L.layerGroup().addTo(map);
+            telescopeLayer = L.layerGroup().addTo(map);
+            invisibleLayer = L.layerGroup().addTo(map);
+            
+            myLocationMarker = L.marker([CONFIG.myLat, CONFIG.myLon], {
+                icon: L.divIcon({
+                    html: '<div style="background: red; width: 20px; height: 20px; border-radius: 50%; border: 3px solid white; box-shadow: 0 0 10px rgba(0,0,0,0.5);"></div>',
+                    className: '',
+                    iconSize: [20, 20]
+                })
+            }).addTo(map).bindPopup('📍 ' + selectedLocation.name);
+        }
+        
+        function initUI() {
+            document.getElementById('calculateBtn').addEventListener('click', calculate);
+            
+            document.querySelectorAll('.quick-date-btn').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    const days = parseInt(e.target.dataset.days);
+                    const date = new Date();
+                    date.setDate(date.getDate() + days);
+                    document.getElementById('dateInput').value = date.toISOString().split('T')[0];
+                    
+                    document.querySelectorAll('.quick-date-btn').forEach(b => b.classList.remove('active'));
+                    e.target.classList.add('active');
+                });
+            });
+            
+            document.getElementById('layersBtn').addEventListener('click', () => {
+                document.getElementById('layersMenu').classList.add('show');
+            });
+            
+            document.getElementById('closeLayersBtn').addEventListener('click', closeLayersMenu);
+            document.getElementById('layersMenu').addEventListener('click', (e) => {
+                if (e.target.id === 'layersMenu') closeLayersMenu();
+            });
+            
+            document.getElementById('toggleTerminator').addEventListener('change', updateLayers);
+            document.getElementById('toggleEye').addEventListener('change', updateLayers);
+            document.getElementById('toggleTelescope').addEventListener('change', updateLayers);
+            document.getElementById('toggleInvisible').addEventListener('change', updateLayers);
+            
+            document.getElementById('timeSlider').addEventListener('input', (e) => {
+                currentHour = parseInt(e.target.value);
+                document.getElementById('timeValue').textContent = `${currentHour.toString().padStart(2, '0')}:00 UTC`;
+                if (terminatorLayer) {
+                    updateTerminator();
+                }
+            });
+            
+            document.getElementById('citySelect').addEventListener('change', (e) => {
+                if (e.target.value) {
+                    const [lat, lon] = e.target.value.split(',').map(Number);
+                    selectedLocation = {
+                        lat: lat,
+                        lon: lon,
+                        name: e.target.options[e.target.selectedIndex].text
+                    };
+                    map.setView([lat, lon], 6);
+                    myLocationMarker.setLatLng([lat, lon]);
+                    myLocationMarker.setPopupContent('📍 ' + selectedLocation.name);
+                }
+            });
+            
+            document.getElementById('locationFab').addEventListener('click', () => {
+                map.setView([selectedLocation.lat, selectedLocation.lon], 6);
+            });
+            
+            document.getElementById('statsFab').addEventListener('click', () => {
+                if (currentData) showStats();
+            });
+            
+            document.getElementById('infoPopup').addEventListener('click', () => {
+                document.getElementById('infoPopup').classList.remove('show');
+            });
+        }
+        
+        function initTime() {
+            setInterval(() => {
+                const now = new Date();
+                const utc = now.toUTCString().split(' ')[4];
+                document.getElementById('worldTime').textContent = `🌍 UTC: ${utc}`;
+                
+                const local = now.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
+                document.getElementById('localTime').textContent = `📍 Lokal: ${local}`;
+            }, 1000);
+        }
+        
+        function closeLayersMenu() {
+            document.getElementById('layersMenu').classList.remove('show');
+        }
+        
+        function updateLayers() {
+            const showTerminator = document.getElementById('toggleTerminator').checked;
+            const showEye = document.getElementById('toggleEye').checked;
+            const showTelescope = document.getElementById('toggleTelescope').checked;
+            const showInvisible = document.getElementById('toggleInvisible').checked;
+            
+            if (terminatorLayer) {
+                if (showTerminator) {
+                    terminatorLayer.addTo(map);
+                } else {
+                    map.removeLayer(terminatorLayer);
+                }
+            }
+            
+            if (showEye) {
+                eyeLayer.addTo(map);
+            } else {
+                map.removeLayer(eyeLayer);
+            }
+            
+            if (showTelescope) {
+                telescopeLayer.addTo(map);
+            } else {
+                map.removeLayer(telescopeLayer);
+            }
+            
+            if (showInvisible) {
+                invisibleLayer.addTo(map);
+            } else {
+                map.removeLayer(invisibleLayer);
+            }
+        }
+        
+        function updateTerminator() {
+            if (terminatorLayer) {
+                map.removeLayer(terminatorLayer);
+            }
+            
+            const dateStr = document.getElementById('dateInput').value;
+            const date = new Date(dateStr + 'T' + currentHour.toString().padStart(2, '0') + ':00:00Z');
+            
+            terminatorLayer = L.terminator({ time: date }).addTo(map);
+        }
+        
+        // =====================================
+        // ASTRONOMIE BERECHNUNGEN
+        // =====================================
+        
+        function toJulianDate(date) {
+            return (date.getTime() / 86400000) + 2440587.5;
+        }
+        
+        function calculateSunPosition(jd) {
+            const n = jd - 2451545.0;
+            const L = (280.460 + 0.9856474 * n) % 360;
+            const g = (357.528 + 0.9856003 * n) % 360;
+            const lambda = (L + 1.915 * Math.sin(g * Math.PI / 180) + 0.020 * Math.sin(2 * g * Math.PI / 180)) % 360;
+            const epsilon = 23.439 - 0.0000004 * n;
+            
+            const ra = Math.atan2(Math.cos(epsilon * Math.PI / 180) * Math.sin(lambda * Math.PI / 180), 
+                                  Math.cos(lambda * Math.PI / 180)) * 180 / Math.PI;
+            const dec = Math.asin(Math.sin(epsilon * Math.PI / 180) * Math.sin(lambda * Math.PI / 180)) * 180 / Math.PI;
+            
+            return { ra, dec };
+        }
+        
+        function calculateMoonPosition(jd) {
+            const T = (jd - 2451545.0) / 36525;
+            const L0 = (218.316 + 481267.881 * T) % 360;
+            const l = (134.963 + 477198.868 * T) % 360;
+            const F = (93.272 + 483202.028 * T) % 360;
+            const D = (297.850 + 445267.112 * T) % 360;
+            
+            const lambda = L0 + 6.289 * Math.sin(l * Math.PI / 180);
+            const beta = 5.128 * Math.sin(F * Math.PI / 180);
+            const epsilon = 23.439 - 0.0000004 * (jd - 2451545.0);
+            
+            const ra = Math.atan2(Math.cos(epsilon * Math.PI / 180) * Math.sin(lambda * Math.PI / 180) - 
+                                  Math.tan(beta * Math.PI / 180) * Math.sin(epsilon * Math.PI / 180),
+                                  Math.cos(lambda * Math.PI / 180)) * 180 / Math.PI;
+            const dec = Math.asin(Math.sin(epsilon * Math.PI / 180) * Math.sin(lambda * Math.PI / 180) * 
+                                  Math.cos(beta * Math.PI / 180) + 
+                                  Math.cos(epsilon * Math.PI / 180) * Math.sin(beta * Math.PI / 180)) * 180 / Math.PI;
+            
+            return { ra, dec };
+        }
+        
+        function calculateHorizontalCoordinates(ra, dec, lat, lon, lst) {
+            const ha = (lst - ra) * Math.PI / 180;
+            const latRad = lat * Math.PI / 180;
+            const decRad = dec * Math.PI / 180;
+            
+            const sinAlt = Math.sin(latRad) * Math.sin(decRad) + 
+                          Math.cos(latRad) * Math.cos(decRad) * Math.cos(ha);
+            const alt = Math.asin(sinAlt) * 180 / Math.PI;
+            
+            return { altitude: alt };
+        }
+        
+        function calculateLocalSiderealTime(jd, lon) {
+            const T = (jd - 2451545.0) / 36525;
+            const theta0 = 280.46061837 + 360.98564736629 * (jd - 2451545.0) + 
+                          0.000387933 * T * T - T * T * T / 38710000;
+            return (theta0 + lon) % 360;
+        }
+        
+        function findSunset(date, lat, lon) {
+            const baseJD = toJulianDate(date);
+            for (let hour = 12; hour < 36; hour += 0.25) {
+                const jd = baseJD + hour / 24;
+                const sunPos = calculateSunPosition(jd);
+                const lst = calculateLocalSiderealTime(jd, lon);
+                const sunHor = calculateHorizontalCoordinates(sunPos.ra, sunPos.dec, lat, lon, lst);
+                
+                if (sunHor.altitude < -0.5) {
+                    return jd;
+                }
+            }
+            return null;
+        }
+        
+        function calculateAngularSeparation(ra1, dec1, ra2, dec2) {
+            const dRa = (ra2 - ra1) * Math.PI / 180;
+            const d1 = dec1 * Math.PI / 180;
+            const d2 = dec2 * Math.PI / 180;
+            
+            const cos_sep = Math.sin(d1) * Math.sin(d2) + 
+                           Math.cos(d1) * Math.cos(d2) * Math.cos(dRa);
+            return Math.acos(Math.max(-1, Math.min(1, cos_sep))) * 180 / Math.PI;
+        }
+        
+        function calculateVisibility(lat, lon, date) {
+            try {
+                const sunsetJD = findSunset(date, lat, lon);
+                if (!sunsetJD) return null;
+                
+                const sunPos = calculateSunPosition(sunsetJD);
+                const moonPos = calculateMoonPosition(sunsetJD);
+                const lst = calculateLocalSiderealTime(sunsetJD, lon);
+                
+                const moonHor = calculateHorizontalCoordinates(moonPos.ra, moonPos.dec, lat, lon, lst);
+                const moonAlt = moonHor.altitude;
+                
+                const separation = calculateAngularSeparation(sunPos.ra, sunPos.dec, moonPos.ra, moonPos.dec);
+                
+                let status = 'invisible';
+                if (moonAlt >= CONFIG.minAltitude) {
+                    if (separation >= CONFIG.minElongationTelescope) {
+                        status = 'eye';
+                    } else if (separation >= CONFIG.minElongationInvisible) {
+                        status = 'telescope';
+                    }
+                }
+                
+                return {
+                    status: status,
+                    moonAlt: moonAlt,
+                    separation: separation
+                };
+            } catch (e) {
+                return null;
+            }
+        }
+        
+        // =====================================
+        // BERECHNUNG & ANZEIGE
+        // =====================================
+        
+        async function calculate() {
+            const dateStr = document.getElementById('dateInput').value;
+            if (!dateStr) {
+                showStatus('Bitte wähle ein Datum!', 'error');
+                return;
+            }
+            
+            const date = new Date(dateStr + 'T12:00:00Z');
+            
+            document.getElementById('calculateBtn').disabled = true;
+            document.getElementById('calculateBtn').innerHTML = '<span class="spinner"></span> Berechne...';
+            showStatus('Berechnung läuft...', 'loading', true);
+            
+            try {
+                eyeLayer.clearLayers();
+                telescopeLayer.clearLayers();
+                invisibleLayer.clearLayers();
+                
+                const results = await calculateGrid(date);
+                currentData = { date, results };
+                
+                updateTerminator();
+                displayResults(results);
+                
+                showStatus(`✅ ${results.length} Punkte berechnet`, 'success');
+                document.getElementById('locationFab').classList.add('show');
+                document.getElementById('statsFab').classList.add('show');
+                
+                setTimeout(() => hideStatus(), 3000);
+                
+            } catch (error) {
+                console.error(error);
+                showStatus('❌ Fehler bei der Berechnung', 'error');
+            } finally {
+                document.getElementById('calculateBtn').disabled = false;
+                document.getElementById('calculateBtn').innerHTML = '🔍 Berechnen';
+            }
+        }
+        
+        async function calculateGrid(date) {
+            const results = [];
+            let processed = 0;
+            const latRange = [];
+            const lonRange = [];
+            
+            for (let lat = -60; lat < 60; lat += CONFIG.gridStep) {
+                latRange.push(lat);
+            }
+            for (let lon = -180; lon < 180; lon += CONFIG.gridStep) {
+                lonRange.push(lon);
+            }
+            
+            const total = latRange.length * lonRange.length;
+            
+            for (const lat of latRange) {
+                for (const lon of lonRange) {
+                    const visibility = calculateVisibility(lat, lon, date);
+                    
+                    if (visibility) {
+                        results.push({ lat, lon, ...visibility });
+                    }
+                    
+                    processed++;
+                    if (processed % 50 === 0) {
+                        updateProgress(processed / total * 100);
+                        await new Promise(resolve => setTimeout(resolve, 0));
+                    }
+                }
+            }
+            
+            return results;
+        }
+        
+        function displayResults(results) {
+            results.forEach(r => {
+                let layer, color, fillColor, radius;
+                
+                if (r.status === 'eye') {
+                    layer = eyeLayer;
+                    color = 'green';
+                    fillColor = 'lime';
+                    radius = 4;
+                } else if (r.status === 'telescope') {
+                    layer = telescopeLayer;
+                    color = 'blue';
+                    fillColor = 'blue';
+                    radius = 3;
+                } else {
+                    layer = invisibleLayer;
+                    color = 'red';
+                    fillColor = 'red';
+                    radius = 2;
+                }
+                
+                const circle = L.circleMarker([r.lat, r.lon], {
+                    radius: radius,
+                    fillColor: fillColor,
+                    color: color,
+                    weight: 1,
+                    opacity: 0.7,
+                    fillOpacity: 0.5
+                });
+                
+                circle.on('click', () => showPointInfo(r));
+                layer.addLayer(circle);
+            });
+            
+            updateLayers();
+        }
+        
+        function showPointInfo(point) {
+            const statusText = {
+                'eye': '🟢 Mit bloßem Auge sichtbar',
+                'telescope': '🔵 Nur mit Teleskop sichtbar',
+                'invisible': '🔴 Nicht sichtbar'
+            };
+            
+            document.getElementById('infoTitle').textContent = statusText[point.status];
+            document.getElementById('infoGrid').innerHTML = `
+                <div class="info-item">
+                    <div class="info-item-label">Breitengrad</div>
+                    <div class="info-item-value">${point.lat.toFixed(2)}°</div>
+                </div>
+                <div class="info-item">
+                    <div class="info-item-label">Längengrad</div>
+                    <div class="info-item-value">${point.lon.toFixed(2)}°</div>
+                </div>
+                <div class="info-item">
+                    <div class="info-item-label">Mondhöhe</div>
+                    <div class="info-item-value">${point.moonAlt.toFixed(1)}°</div>
+                </div>
+                <div class="info-item">
+                    <div class="info-item-label">Elongation</div>
+                    <div class="info-item-value">${point.separation.toFixed(1)}°</div>
+                </div>
+            `;
+            
+            document.getElementById('infoPopup').classList.add('show');
+            
+            setTimeout(() => {
+                document.getElementById('infoPopup').classList.remove('show');
+            }, 5000);
+        }
+        
+        function showStats() {
+            const eye = currentData.results.filter(r => r.status === 'eye').length;
+            const telescope = currentData.results.filter(r => r.status === 'telescope').length;
+            const invisible = currentData.results.filter(r => r.status === 'invisible').length;
+            
+            alert(`📊 Statistiken\n\n🟢 Bloßes Auge: ${eye}\n🔵 Teleskop: ${telescope}\n🔴 Nicht sichtbar: ${invisible}\n\n📅 ${currentData.date.toLocaleDateString('de-DE')}`);
+        }
+        
+        function showStatus(text, type = 'loading', showProgress = false) {
+            const banner = document.getElementById('statusBanner');
+            banner.className = 'status-banner show ' + type;
+            document.getElementById('statusText').textContent = text;
+            document.getElementById('progressContainer').style.display = showProgress ? 'block' : 'none';
+        }
+        
+        function hideStatus() {
+            document.getElementById('statusBanner').classList.remove('show');
+        }
+        
+        function updateProgress(percent) {
+            document.getElementById('progressBar').style.width = percent + '%';
+        }
+    </script>
+</body>
+</html>
