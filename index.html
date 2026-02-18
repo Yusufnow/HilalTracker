@@ -3,16 +3,18 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Prof. Hilal Rechner & Himmelsansicht</title>
+    <title>Hilal Tracker & Sky View</title>
     
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <link rel="stylesheet" href="https://unpkg.com/leaflet-control-geocoder/dist/Control.Geocoder.css" />
     
     <style>
-        body { margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; overflow: hidden; }
+        body { margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; overflow: hidden; background: #000; }
         
-        /* Layout */
-        #map { width: 100%; height: 60vh; background: #000; z-index: 1; }
+        /* Oben: Karte (60% der Höhe) */
+        #map { width: 100%; height: 60vh; z-index: 1; }
+        
+        /* Unten: Himmelsansicht (40% der Höhe) */
         #sky-view { 
             width: 100%; 
             height: 40vh; 
@@ -26,7 +28,7 @@
             overflow: hidden;
         }
 
-        /* Schwebendes Kontrollpanel */
+        /* Schwebendes Menü */
         .controls {
             position: absolute;
             top: 10px;
@@ -42,7 +44,7 @@
             align-items: center;
         }
 
-        input[type="date"] { padding: 8px; border-radius: 15px; border: 1px solid #ccc; }
+        input[type="date"] { padding: 8px; border-radius: 15px; border: 1px solid #ccc; outline: none; }
         
         button.calc-btn {
             background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
@@ -55,13 +57,13 @@
         }
         button.calc-btn:disabled { background: #ccc; cursor: wait; }
 
-        /* Loader */
+        /* Ladebalken */
         .loader {
             position: fixed; top: 0; left: 0; width: 0%; height: 4px;
             background: #00e5ff; z-index: 2000; transition: width 0.2s;
         }
 
-        /* Sky View Labels */
+        /* Text im Himmelsfenster */
         .sky-info {
             position: absolute;
             top: 10px;
@@ -70,12 +72,14 @@
             font-size: 14px;
             text-shadow: 0 1px 3px rgba(0,0,0,0.8);
             pointer-events: none;
+            background: rgba(0,0,0,0.3);
+            padding: 5px;
+            border-radius: 5px;
         }
         
-        canvas {
-            display: block;
-        }
-
+        canvas { display: block; }
+        
+        /* Suchleiste Design */
         .leaflet-control-geocoder { border-radius: 20px !important; }
     </style>
 </head>
@@ -91,7 +95,7 @@
     <div id="map"></div>
 
     <div id="sky-view">
-        <div class="sky-info" id="skyInfoText">Wähle einen Ort auf der Karte...</div>
+        <div class="sky-info" id="skyInfoText">Klicke auf die Karte für Himmelsansicht...</div>
         <canvas id="skyCanvas"></canvas>
     </div>
 
@@ -100,40 +104,46 @@
     <script src="https://cdn.jsdelivr.net/npm/astronomy-engine@2.1.19/astronomy.browser.min.js"></script>
 
     <script>
-        // --- 1. SETUP ---
-        const map = L.map('map', { center: [20, 0], zoom: 2 });
+        // --- 1. KARTEN SETUP ---
+        const map = L.map('map', { center: [24.4, 45], zoom: 3 }); // Startet grob über Saudi-Arabien/Welt
         L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
-            attribution: 'Esri'
+            attribution: 'Esri Satellite'
         }).addTo(map);
 
         // Suchfunktion
         const geocoder = L.Control.geocoder({
-            defaultMarkGeocode: false
+            defaultMarkGeocode: false,
+            placeholder: "Stadt suchen..."
         }).on('markgeocode', function(e) {
             const center = e.geocode.center;
             map.setView(center, 6);
             updateSkyView(center.lat, center.lng, e.geocode.name);
+            
+            // Marker setzen
+            L.marker(center).addTo(map).bindPopup(e.geocode.name).openPopup();
         }).addTo(map);
 
-        // Klick Event auf Karte
+        // Klick auf Karte -> Himmel updaten
         map.on('click', function(e) {
             updateSkyView(e.latlng.lat, e.latlng.lng, "Gewählter Ort");
         });
 
+        // Layer Gruppen für die bunten Punkte
         const layers = {
             green: L.layerGroup().addTo(map),
             magenta: L.layerGroup().addTo(map),
             blue: L.layerGroup().addTo(map)
         };
 
-        // Canvas Setup
+        // Canvas für Himmel
         const canvas = document.getElementById('skyCanvas');
         const ctx = canvas.getContext('2d');
         let selectedLocation = null;
 
+        // Datum auf Heute setzen
         document.getElementById('datePicker').valueAsDate = new Date();
 
-        // Canvas Größe anpassen
+        // Canvas bei Fenstergröße anpassen
         function resizeCanvas() {
             const container = document.getElementById('sky-view');
             canvas.width = container.clientWidth;
@@ -144,52 +154,44 @@
         resizeCanvas();
 
 
-        // --- 2. HIMMELSANSICHT LOGIK (Der neue Teil) ---
+        // --- 2. HIMMELSANSICHT (Planeten & Mond) ---
 
         function updateSkyView(lat, lon, name) {
             selectedLocation = { lat, lon, name };
             const dateInput = document.getElementById('datePicker').value;
             const date = new Date(dateInput);
             
-            // 1. Sonnenuntergang berechnen
             const observer = new Astronomy.Observer(lat, lon, 0);
             
-            // Wir suchen den Sonnenuntergang am gewählten Tag
-            // Wir setzen die Zeit auf Mittag, um den nächsten Untergang zu finden
-            date.setUTCHours(12,0,0,0);
+            // Sonnenuntergang finden (Zeitpunkt für die Ansicht)
+            date.setUTCHours(12,0,0,0); 
             const sunset = Astronomy.SearchRiseSet(Astronomy.Body.Sun, observer, 1, date, 1);
             
             if (!sunset) {
-                document.getElementById('skyInfoText').innerHTML = `Kein Sonnenuntergang (Polartag/nacht) in<br><b>${name}</b>`;
+                document.getElementById('skyInfoText').innerHTML = `Kein klassischer Sonnenuntergang in<br><b>${name}</b>`;
                 ctx.clearRect(0, 0, canvas.width, canvas.height);
                 return;
             }
 
-            const time = sunset.date; // Zeitpunkt des Untergangs
-            
-            // Anzeige Info
+            const time = sunset.date; 
             const localTime = time.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
             document.getElementById('skyInfoText').innerHTML = 
                 `<b>${name}</b><br>Sonnenuntergang: ${localTime}<br>Blick Richtung West`;
 
-            // 2. Positionen berechnen
+            // Positionen aller wichtigen Körper berechnen
             const bodies = [
-                { name: 'Sonne', type: 'Sun', color: '#FFD700', radius: 10 },
-                { name: 'Mond', type: 'Moon', color: '#FFF', radius: 8 },
-                { name: 'Venus', type: 'Venus', color: '#00FFFF', radius: 4 },
-                { name: 'Jupiter', type: 'Jupiter', color: '#FFDAB9', radius: 4 },
-                { name: 'Saturn', type: 'Saturn', color: '#F4A460', radius: 3 },
-                { name: 'Mars', type: 'Mars', color: '#FF4500', radius: 3 },
-                { name: 'Merkur', type: 'Mercury', color: '#B0C4DE', radius: 2 }
+                { name: 'Sonne', type: 'Sun', color: '#FFD700', radius: 15, glow: true },
+                { name: 'Mond', type: 'Moon', color: '#FFF', radius: 10, glow: false }, // Spezieller Render
+                { name: 'Venus', type: 'Venus', color: '#00FFFF', radius: 6, glow: true },
+                { name: 'Jupiter', type: 'Jupiter', color: '#FFDAB9', radius: 5, glow: true },
+                { name: 'Saturn', type: 'Saturn', color: '#F4A460', radius: 4, glow: true },
+                { name: 'Mars', type: 'Mars', color: '#FF4500', radius: 4, glow: true },
+                { name: 'Merkur', type: 'Mercury', color: '#B0C4DE', radius: 3, glow: true }
             ];
 
-            const positions = [];
-            
-            // Wir definieren das Blickfeld (FOV)
-            // Zentrum: Westen (270 Grad Azimut)
-            // Wir zeigen 60 Grad Weite an (240 bis 300)
-            const centerAz = sunset.azimuth || 270; // Nutze echten Sonnenuntergangs-Azimut als Zentrum
-            const fov = 60; 
+            const renderList = [];
+            const centerAz = sunset.azimuth || 270; 
+            const fov = 50; // Blickfeld in Grad (Zoom)
             const pxPerDeg = canvas.width / fov;
 
             bodies.forEach(body => {
@@ -197,110 +199,115 @@
                 const equator = Astronomy.Equator(astroBody, time, observer, true, true);
                 const horizon = Astronomy.Horizon(time, observer, equator.ra, equator.dec, 'normal');
                 
-                positions.push({
-                    ...body,
-                    az: horizon.az,
-                    alt: horizon.alt,
-                    dist: equator.dist // Entfernung (für Mondgröße, hier vereinfacht)
-                });
+                renderList.push({ ...body, az: horizon.az, alt: horizon.alt });
             });
 
-            // 3. Zeichnen
-            drawSky(positions, centerAz, pxPerDeg);
+            // Zeichnen
+            drawSky(renderList, centerAz, pxPerDeg);
         }
 
         function drawSky(bodies, centerAz, pxPerDeg) {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-            // Horizont Linie zeichnen
-            const horizonY = canvas.height * 0.8; // Horizont bei 80% der Höhe
+            // Horizont Linie
+            const horizonY = canvas.height * 0.8; 
             
-            // Linie
+            // Einfacher Farbverlauf für Himmel ist schon im CSS, hier nur Objekte
+            
+            // Horizontkante
             ctx.beginPath();
             ctx.moveTo(0, horizonY);
             ctx.lineTo(canvas.width, horizonY);
-            ctx.strokeStyle = 'rgba(255,255,255,0.3)';
-            ctx.lineWidth = 1;
+            ctx.strokeStyle = 'rgba(255,255,255,0.2)';
+            ctx.lineWidth = 2;
             ctx.stroke();
 
             // Körper zeichnen
             bodies.forEach(body => {
-                // X-Position berechnen
                 let azDiff = body.az - centerAz;
-                // Korrektur für 360-Grad Sprung
                 if (azDiff > 180) azDiff -= 360;
                 if (azDiff < -180) azDiff += 360;
 
                 const x = (canvas.width / 2) + (azDiff * pxPerDeg);
-                const y = horizonY - (body.alt * pxPerDeg); // Y geht nach unten, also minus
+                const y = horizonY - (body.alt * pxPerDeg); 
 
-                // Nur zeichnen wenn im Bild
-                if (x > -50 && x < canvas.width + 50 && y > -50 && y < canvas.height + 50) {
+                // Nur zeichnen, wenn im sichtbaren Bereich (+ Puffer)
+                if (x > -50 && x < canvas.width + 50 && y > -100 && y < canvas.height + 50) {
                     
-                    // Zeichnen
-                    ctx.beginPath();
-                    
-                    if (body.type === 'Moon') {
-                        // Mond speziell (simuliert)
-                        ctx.fillStyle = body.color;
-                        ctx.arc(x, y, body.radius * 1.5, 0, Math.PI * 2);
-                        ctx.fill();
-                        // Kleiner Schatten für Phase (sehr vereinfacht: Neumond)
-                        ctx.fillStyle = 'rgba(0,0,0,0.5)';
+                    // Schein (Glow)
+                    if (body.glow) {
                         ctx.beginPath();
-                        ctx.arc(x - 2, y - 2, body.radius * 1.3, 0, Math.PI * 2);
-                        ctx.fill();
-                    } else {
-                        // Sterne/Planeten/Sonne
-                        ctx.fillStyle = body.color;
-                        ctx.arc(x, y, body.radius, 0, Math.PI * 2);
-                        ctx.fill();
-                        
-                        // Schein (Glow)
-                        ctx.beginPath();
-                        ctx.arc(x, y, body.radius * 3, 0, Math.PI * 2);
+                        ctx.arc(x, y, body.radius * 2.5, 0, Math.PI * 2);
                         ctx.fillStyle = body.color;
                         ctx.globalAlpha = 0.2;
                         ctx.fill();
                         ctx.globalAlpha = 1.0;
                     }
 
-                    // Label/Text
-                    ctx.fillStyle = 'white';
-                    ctx.font = '12px Arial';
-                    ctx.textAlign = 'center';
-                    // Text unter dem Objekt (außer wenn unter Horizont)
-                    const textY = y > horizonY ? y - 15 : y + 20;
-                    ctx.fillText(body.name, x, textY);
+                    // Körper
+                    ctx.beginPath();
+                    if (body.type === 'Moon') {
+                        // Mond Kreis
+                        ctx.arc(x, y, body.radius, 0, Math.PI * 2);
+                        ctx.fillStyle = '#FFFFFF';
+                        ctx.fill();
+                        // Mondschatten (Simuliert Neumond/Sichel sehr einfach)
+                        // Da wir Hilal suchen, ist der Mond fast dunkel. 
+                        // Wir malen einen dunklen Kreis leicht versetzt darüber.
+                        ctx.fillStyle = '#222'; 
+                        ctx.beginPath();
+                        ctx.arc(x - 2, y - 2, body.radius * 0.9, 0, Math.PI * 2);
+                        ctx.fill();
+                    } else {
+                        ctx.arc(x, y, body.radius, 0, Math.PI * 2);
+                        ctx.fillStyle = body.color;
+                        ctx.fill();
+                    }
+
+                    // Beschriftung
+                    if (body.alt > -5) { // Nur beschriften wenn nicht tief unter Horizont
+                        ctx.fillStyle = 'white';
+                        ctx.font = '12px sans-serif';
+                        ctx.textAlign = 'center';
+                        ctx.fillText(body.name, x, y + body.radius + 15);
+                    }
                 }
             });
         }
 
-        // --- 3. KARTEN BERECHNUNG (Alte Logik) ---
+
+        // --- 3. KARTEN BERECHNUNG (Odeh Kurven) ---
 
         function getMoonVisibility(lat, lon, dateObj) {
+            // Astronomie Engine für exakte Werte nutzen
             const date = new Date(dateObj);
             date.setUTCHours(12, 0, 0, 0);
             const observer = new Astronomy.Observer(lat, lon, 0);
             const sunset = Astronomy.SearchRiseSet(Astronomy.Body.Sun, observer, 1, date, 1);
+            
             if (!sunset) return null;
 
             const time = sunset.date;
             const sunPos = Astronomy.Equator(Astronomy.Body.Sun, time, observer, true, true);
             const moonPos = Astronomy.Equator(Astronomy.Body.Moon, time, observer, true, true);
-            const sunHor = Astronomy.Horizon(time, observer, sunPos.ra, sunPos.dec, 'normal');
             const moonHor = Astronomy.Horizon(time, observer, moonPos.ra, moonPos.dec, 'normal');
 
-            const altMoon = moonHor.alt;
-            const elongation = Astronomy.AngleBetween(sunPos.vec, moonPos.vec);
-            
-            // Odeh Logik
+            const altMoon = moonHor.alt; // Höhe
+            const elongation = Astronomy.AngleBetween(sunPos.vec, moonPos.vec); // Winkelabstand
+            const width = Astronomy.Illumination(Astronomy.Body.Moon, time).phase_fraction * 100;
+
+            // Kriterien (angelehnt an Odeh/Yallop)
+            if (altMoon <= 0.5) return 'invisible'; // Unter Horizont oder zu tief
+            if (elongation < 6.4) return 'invisible'; // Danjon Limit
+
+            // Odeh V-Parameter (vereinfachte Formel für Parabel-Kurve)
+            // Diese Formel erzeugt die Kurve: Je weniger Elongation, desto höher muss der Mond stehen
             let V = altMoon - (-0.1018 * Math.pow(elongation, 2) + 1.6787 * elongation - 5.5704);
 
-            if (altMoon <= 0.5 || elongation < 7.0) return 'invisible'; 
-            if (V >= 5.6) return 'green';
-            if (V >= 2.0) return 'magenta';
-            if (V >= -0.9) return 'blue';
+            if (V >= 5.6) return 'green';      // Leicht sichtbar (Auge)
+            if (V >= 2.0) return 'magenta';    // Möglich bei perfekten Bedingungen
+            if (V >= -0.9) return 'blue';      // Nur Teleskop
+            
             return 'invisible';
         }
 
@@ -310,38 +317,59 @@
             const dateInput = document.getElementById('datePicker').value;
             
             if (!dateInput) return alert("Bitte Datum wählen");
+
             btn.disabled = true;
             layers.green.clearLayers();
             layers.magenta.clearLayers();
             layers.blue.clearLayers();
             
-            const step = 2; 
+            const step = 2; // Genauigkeit (kleiner = genauer aber langsamer)
             const date = new Date(dateInput);
 
+            // Chunk-Verarbeitung damit Browser nicht abstürzt
             const processChunk = (latStart) => {
                 for (let lat = latStart; lat > -60; lat -= step) {
+                    
+                    // Pause machen alle 5 Grad damit UI reagiert
                     if (lat < latStart && (latStart - lat) % 5 === 0) {
                         setTimeout(() => processChunk(lat), 0);
                         return;
                     }
+
                     for (let lon = -180; lon < 180; lon += step) {
                         const result = getMoonVisibility(lat, lon, date);
+                        
                         if (result !== 'invisible' && result !== null) {
-                            let color = result === 'green' ? '#00FF00' : (result === 'magenta' ? '#FF00FF' : '#0055FF');
-                            L.circleMarker([lat, lon], {
-                                radius: 3, fillColor: color, color: color, weight: 0, opacity: 0.6, fillOpacity: 0.6
-                            }).addTo(layers[result]);
+                            let color = '#000';
+                            let layer = null;
+
+                            if (result === 'green') { color = '#00FF00'; layer = layers.green; }
+                            else if (result === 'magenta') { color = '#FF00FF'; layer = layers.magenta; }
+                            else if (result === 'blue') { color = '#0055FF'; layer = layers.blue; }
+
+                            if (layer) {
+                                L.circleMarker([lat, lon], {
+                                    radius: 2, 
+                                    fillColor: color, color: color, 
+                                    weight: 0, opacity: 0.5, fillOpacity: 0.5
+                                }).addTo(layer);
+                            }
                         }
                     }
+                    // Balken updaten
                     loader.style.width = (Math.abs(60 - lat) / 120 * 100) + "%";
                 }
+                
                 btn.disabled = false;
                 loader.style.width = "0%";
             };
-            processChunk(60); 
-        }
 
+            processChunk(60); // Start bei 60 Grad Nord
+        }
+        
+        // Auto-Start beim Laden
         setTimeout(calculateMap, 1000);
+
     </script>
 </body>
 </html>
